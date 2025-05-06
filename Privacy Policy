@@ -1,0 +1,37 @@
+# Privacy Policy – Church Admin App
+
+**Effective Date:** May 6, 2025  
+**Developer:** Eregion Codeworks
+
+Church Admin is a mobile app designed to help a small group manage attendance and meetings for their local church. This privacy policy outlines how the app handles user data.
+
+## 1. Data Collection
+The Church Admin app:
+- Collects anonymous attendance data (number of attendees in various categories)
+- Stores data securely in Google’s Firebase Cloud Firestore
+- Does not collect names, emails, or personal identifiers
+
+## 2. Authentication
+- The app uses anonymous sign-in via Firebase Authentication
+- No personal information is required to use the app
+
+## 3. Data Storage & Use
+- All data is stored in Firebase Firestore and is only accessible to authorized users of the app
+- Data is used only for attendance tracking and reporting within your church organization
+
+## 4. Data Sharing
+We do not share, sell, or transmit your data to any third parties. The app is intended for private organizational use only.
+
+## 5. Third-Party Services
+This app uses:
+- [Firebase Authentication](https://firebase.google.com/products/auth)
+- [Cloud Firestore](https://firebase.google.com/products/firestore)
+
+These services may collect technical data such as device type and OS version for security and stability purposes.
+
+## 6. User Rights
+Users who wish to request deletion of any records or data may contact the administrator of the app or the developer listed below.
+
+## Contact
+If you have any questions or concerns, contact:  
+[you@example.com]
