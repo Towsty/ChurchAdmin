@@ -1,0 +1,19 @@
+<lint-module
+    format="1"
+    dir="/Users/iancarr/development/church_admin_app/android/app"
+    name=":app"
+    type="APP"
+    maven="android:app:unspecified"
+    agpVersion="8.7.0"
+    buildFolder="/Users/iancarr/development/church_admin_app/build/app"
+    bootClassPath="/Users/iancarr/Library/Android/sdk/platforms/android-35/android.jar:/Users/iancarr/Library/Android/sdk/build-tools/34.0.0/core-lambda-stubs.jar"
+    javaSourceLevel="11"
+    compileTarget="android-35"
+    neverShrinking="true">
+  <lintOptions
+      abortOnError="true"
+      absolutePaths="true"
+      checkReleaseBuilds="true"
+      explainIssues="true"/>
+  <variant name="release"/>
+</lint-module>
