@@ -1,14 +1,70 @@
-gradle-wrapper.jar
-/.gradle
-/captures/
-/gradlew
-/gradlew.bat
-/local.properties
-GeneratedPluginRegistrant.java
-.cxx/
+# Flutter/Dart/Pub
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+flutter_*.png
+generated_plugin_registrant.dart
+.melos_tool/
 
-# Remember to never publicly share your keystore.
-# See https://flutter.dev/to/reference-keystore
-key.properties
-**/*.keystore
-**/*.jks
+# macOS
+macos/Flutter/ephemeral/
+macos/build/
+
+# Windows
+windows/Flutter/ephemeral/
+windows/build/
+
+# Linux
+linux/Flutter/ephemeral/
+linux/build/
+
+# iOS
+ios/Flutter/ephemeral/
+ios/Pods/
+ios/.symlinks/
+ios/Runner.xcworkspace/
+ios/DerivedData/
+ios/build/
+
+# Android
+android/.gradle/
+android/build/
+*.iml
+.gradle/
+local.properties
+
+# Firebase / Google Services
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+
+# IDE / Editor
+.idea/
+.vscode/
+*.iml
+
+# System
+.DS_Store
+Thumbs.db
+
+# Log & temporary files
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Output binaries
+*.apk
+*.aab
+*.dmg
+*.ipa
+*.exe
+*.app
+
+# Optional .env file
+.env
+.env.*
+
+# Firebase CLI cache
+.firebase/

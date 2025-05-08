@@ -1,0 +1,20 @@
+{
+  "buildFiles": [
+    "/Users/iancarr/development/flutter/packages/flutter_tools/gradle/src/main/groovy/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/Users/iancarr/Library/Android/sdk/cmake/3.22.1/bin/ninja",
+      "-C",
+      "/Users/iancarr/development/church_admin_app/android/app/.cxx/RelWithDebInfo/3j4a3k61/arm64-v8a",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/Users/iancarr/Library/Android/sdk/cmake/3.22.1/bin/ninja",
+    "-C",
+    "/Users/iancarr/development/church_admin_app/android/app/.cxx/RelWithDebInfo/3j4a3k61/arm64-v8a",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {}
+}

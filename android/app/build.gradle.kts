@@ -43,8 +43,8 @@ android {
         applicationId = "com.echoesofnumenor.church_admin_app"
         minSdk = 21
         targetSdk = flutter.targetSdkVersion
-        versionCode = 6
-        versionName = "0.5.5" //flutter.versionName
+        versionCode = 7
+        versionName = "0.6.0" //flutter.versionName
     }
 
     buildTypes {
