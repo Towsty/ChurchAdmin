@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/role_permissions.dart';
 import '../widgets/attendance_row.dart';
 import '../models/attendance_record.dart';
 import '../services/attendance_service.dart';
@@ -27,10 +30,12 @@ class _AttendanceInputScreenState extends State<AttendanceInputScreen> {
   int leaderCount = 0;
 
   bool get isEditMode => widget.recordToEdit != null;
+  String? userRole;
 
   @override
   void initState() {
     super.initState();
+    _loadUserRole();
     _loadMeetingTypes();
 
     if (isEditMode) {
@@ -42,6 +47,15 @@ class _AttendanceInputScreenState extends State<AttendanceInputScreen> {
       leaderCount = record.leaders;
       _notesController.text = record.notes ?? '';
     }
+  }
+
+  Future<void> _loadUserRole() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    setState(() {
+      userRole = userDoc.data()?['role'] ?? 'Visitor';
+    });
   }
 
   @override
@@ -57,7 +71,6 @@ class _AttendanceInputScreenState extends State<AttendanceInputScreen> {
     setState(() {
       _meetingTypes = types;
 
-      // ✅ Add current meeting if missing
       if (currentMeeting != null && !_meetingTypes.contains(currentMeeting)) {
         _meetingTypes.add(currentMeeting);
       }
@@ -125,6 +138,16 @@ class _AttendanceInputScreenState extends State<AttendanceInputScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (userRole == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    if (!RolePermissions.canTakeAttendance(userRole!)) {
+      return const Scaffold(
+        body: Center(child: Text('Access denied: insufficient permissions.')),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(isEditMode ? 'Edit Attendance' : 'Take Attendance'),

@@ -45,7 +45,7 @@ class _AuthScreenState extends State<AuthScreen> {
         await FirebaseFirestore.instance.collection('users').doc(cred.user!.uid).set({
           'email': email,
           'name': name,
-          'role': 'member',
+          'role': 'visitor',
           'churchId': null,
           'createdAt': FieldValue.serverTimestamp(),
         });

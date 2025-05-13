@@ -1,6 +1,7 @@
 # This is a generated file; do not edit or check into version control.
 cloud_firestore=/Users/iancarr/.pub-cache/hosted/pub.dev/cloud_firestore-4.17.5/
 cloud_firestore_web=/Users/iancarr/.pub-cache/hosted/pub.dev/cloud_firestore_web-3.12.5/
+connectivity_plus=/Users/iancarr/.pub-cache/hosted/pub.dev/connectivity_plus-5.0.2/
 firebase_auth=/Users/iancarr/.pub-cache/hosted/pub.dev/firebase_auth-4.20.0/
 firebase_auth_web=/Users/iancarr/.pub-cache/hosted/pub.dev/firebase_auth_web-5.12.0/
 firebase_core=/Users/iancarr/.pub-cache/hosted/pub.dev/firebase_core-2.32.0/

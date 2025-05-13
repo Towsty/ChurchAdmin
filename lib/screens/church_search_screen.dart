@@ -13,23 +13,29 @@ class _ChurchSearchScreenState extends State<ChurchSearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   List<DocumentSnapshot> _results = [];
   bool _isLoading = false;
+
   String? _requestedChurchId;
+  Timestamp? _requestedAtTimestamp;
+  String? _currentChurchId;
 
   @override
   void initState() {
     super.initState();
-    _loadUserJoinRequest();
+    _loadUserJoinStatus();
   }
 
-  void _loadUserJoinRequest() async {
+  Future<void> _loadUserJoinStatus() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
     final data = doc.data();
-    if (data != null && data['joinRequest'] != null) {
+
+    if (data != null) {
       setState(() {
-        _requestedChurchId = data['joinRequest']['churchId'];
+        _currentChurchId = data['churchId'];
+        _requestedChurchId = data['joinRequest']?['churchId'];
+        _requestedAtTimestamp = data['joinRequest']?['requestedAt'];
       });
     }
   }
@@ -69,10 +75,12 @@ class _ChurchSearchScreenState extends State<ChurchSearchScreen> {
     final userId = user.uid;
     final churchId = church.id;
 
+    final timestamp = FieldValue.serverTimestamp();
+
     await FirebaseFirestore.instance.collection('users').doc(userId).update({
       'joinRequest': {
         'churchId': churchId,
-        'requestedAt': FieldValue.serverTimestamp(),
+        'requestedAt': timestamp,
       }
     });
 
@@ -83,12 +91,10 @@ class _ChurchSearchScreenState extends State<ChurchSearchScreen> {
         .doc(userId)
         .set({
       'userId': userId,
-      'requestedAt': FieldValue.serverTimestamp(),
+      'requestedAt': timestamp,
     });
 
-    setState(() {
-      _requestedChurchId = churchId;
-    });
+    _loadUserJoinStatus();
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -97,8 +103,38 @@ class _ChurchSearchScreenState extends State<ChurchSearchScreen> {
     }
   }
 
+  Future<void> _cancelJoinRequest() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || _requestedChurchId == null) return;
+
+    final userId = user.uid;
+
+    await FirebaseFirestore.instance.collection('users').doc(userId).update({
+      'joinRequest': FieldValue.delete(),
+    });
+
+    await FirebaseFirestore.instance
+        .collection('churches')
+        .doc(_requestedChurchId)
+        .collection('joinRequests')
+        .doc(userId)
+        .delete();
+
+    _loadUserJoinStatus();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Join request cancelled.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final requestedAt = _requestedAtTimestamp?.toDate();
+    final canCancel = requestedAt != null && now.difference(requestedAt).inSeconds >= 60;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Find Your Church')),
       body: Padding(
@@ -125,12 +161,22 @@ class _ChurchSearchScreenState extends State<ChurchSearchScreen> {
                   itemBuilder: (context, index) {
                     final doc = _results[index];
                     final hasRequested = _requestedChurchId == doc.id;
+                    final isInChurch = _currentChurchId != null;
 
                     return ListTile(
                       title: Text(doc['name']),
                       subtitle: Text('ZIP: ${doc['zipCode']}'),
-                      trailing: hasRequested
-                          ? const Text('Requested', style: TextStyle(color: Colors.grey))
+                      trailing: isInChurch
+                          ? const Text('Already Joined', style: TextStyle(color: Colors.grey))
+                          : hasRequested
+                          ? canCancel
+                          ? ElevatedButton.icon(
+                        icon: const Icon(Icons.cancel),
+                        label: const Text('Cancel'),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                        onPressed: _cancelJoinRequest,
+                      )
+                          : const Text('Requested', style: TextStyle(color: Colors.grey))
                           : ElevatedButton(
                         onPressed: () => _requestJoin(doc),
                         child: const Text('Request'),

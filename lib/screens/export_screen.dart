@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/attendance_record.dart';
 import '../services/export_service.dart';
+import '../services/role_permissions.dart';
 
 class ExportScreen extends StatefulWidget {
   const ExportScreen({super.key});
@@ -17,11 +19,22 @@ class _ExportScreenState extends State<ExportScreen> {
   final ExportService _exportService = ExportService();
   final DateTime _initialDate = DateTime.now();
   late DateTime _selectedMonth;
+  String? userRole;
 
   @override
   void initState() {
     super.initState();
     _selectedMonth = _initialDate;
+    _loadUserRole();
+  }
+
+  Future<void> _loadUserRole() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    setState(() {
+      userRole = doc.data()?['role'] ?? 'Visitor';
+    });
   }
 
   Future<void> _exportData() async {
@@ -64,6 +77,16 @@ class _ExportScreenState extends State<ExportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (userRole == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    if (!RolePermissions.canExportAttendance(userRole!)) {
+      return const Scaffold(
+        body: Center(child: Text('Access denied: insufficient permissions.')),
+      );
+    }
+
     final displayMonth = DateFormat('MMMM yyyy').format(_selectedMonth);
 
     return Scaffold(
