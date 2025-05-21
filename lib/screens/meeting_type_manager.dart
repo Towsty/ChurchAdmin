@@ -25,22 +25,45 @@ class _MeetingTypeManagerState extends State<MeetingTypeManager> {
   Future<void> _loadUserRole() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
-    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final doc =
+        await FirebaseFirestore.instance.collection('users').doc(uid).get();
     setState(() {
       userRole = doc.data()?['role'] ?? 'Visitor';
     });
   }
 
-  void _addMeetingType() {
+  void _addMeetingType() async {
     final newType = _controller.text.trim();
     if (newType.isNotEmpty) {
-      _service.addMeetingType(newType);
-      _controller.clear();
+      try {
+        await _service.addMeetingType(newType);
+        _controller.clear();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error adding meeting type: ${e.toString()}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
     }
   }
 
-  void _removeMeetingType(String type) {
-    _service.deleteMeetingType(type);
+  void _removeMeetingType(String id) async {
+    try {
+      await _service.deleteMeetingType(id);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting meeting type: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -56,9 +79,7 @@ class _MeetingTypeManagerState extends State<MeetingTypeManager> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Manage Meeting Types'),
-      ),
+      appBar: AppBar(title: const Text('Manage Meeting Types')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -76,7 +97,7 @@ class _MeetingTypeManagerState extends State<MeetingTypeManager> {
             ),
             const SizedBox(height: 20),
             Expanded(
-              child: StreamBuilder<List<String>>(
+              child: StreamBuilder<List<Map<String, dynamic>>>(
                 stream: _service.getMeetingTypesStream(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
@@ -93,10 +114,10 @@ class _MeetingTypeManagerState extends State<MeetingTypeManager> {
                     itemBuilder: (context, index) {
                       final type = types[index];
                       return ListTile(
-                        title: Text(type),
+                        title: Text(type['name']),
                         trailing: IconButton(
                           icon: const Icon(Icons.delete),
-                          onPressed: () => _removeMeetingType(type),
+                          onPressed: () => _removeMeetingType(type['id']),
                         ),
                       );
                     },

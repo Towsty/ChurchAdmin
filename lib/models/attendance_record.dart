@@ -8,6 +8,10 @@ class AttendanceRecord {
   final int youth;
   final int leaders;
   final String? notes;
+  final String? enteredBy;
+  final DateTime? enteredAt;
+  final String? lastModifiedBy;
+  final DateTime? lastModifiedAt;
 
   AttendanceRecord({
     this.id,
@@ -17,6 +21,10 @@ class AttendanceRecord {
     required this.youth,
     required this.leaders,
     this.notes,
+    this.enteredBy,
+    this.enteredAt,
+    this.lastModifiedBy,
+    this.lastModifiedAt,
   });
 
   Map<String, dynamic> toLocalJson() {
@@ -38,6 +46,16 @@ class AttendanceRecord {
       'youth': youth,
       'leaders': leaders,
       'notes': notes,
+      'enteredBy': enteredBy,
+      'enteredAt':
+          enteredAt != null
+              ? Timestamp.fromDate(enteredAt!)
+              : FieldValue.serverTimestamp(),
+      'lastModifiedBy': lastModifiedBy,
+      'lastModifiedAt':
+          lastModifiedAt != null
+              ? Timestamp.fromDate(lastModifiedAt!)
+              : FieldValue.serverTimestamp(),
     };
   }
 
@@ -53,19 +71,54 @@ class AttendanceRecord {
   }
 
   factory AttendanceRecord.fromMap(Map<String, dynamic> map, String docId) {
-    final dateField = map['date'];
-    final date = dateField is Timestamp
-        ? dateField.toDate()
-        : DateTime.tryParse(dateField.toString()) ?? DateTime(2000);
-
     return AttendanceRecord(
       id: docId,
-      date: date,
-      meetingType: map['meetingType'] ?? '',
-      adults: map['adults'] ?? 0,
-      youth: map['youth'] ?? 0,
-      leaders: map['leaders'] ?? 0,
+      date: (map['date'] as Timestamp).toDate(),
+      meetingType: map['meetingType'],
+      adults: map['adults'],
+      youth: map['youth'],
+      leaders: map['leaders'],
       notes: map['notes'],
+      enteredBy: map['enteredBy'],
+      enteredAt:
+          map['enteredAt'] != null
+              ? (map['enteredAt'] as Timestamp).toDate()
+              : null,
+      lastModifiedBy: map['lastModifiedBy'],
+      lastModifiedAt:
+          map['lastModifiedAt'] != null
+              ? (map['lastModifiedAt'] as Timestamp).toDate()
+              : null,
+    );
+  }
+
+  int get total => adults + youth + leaders;
+
+  AttendanceRecord copyWith({
+    String? id,
+    DateTime? date,
+    String? meetingType,
+    int? adults,
+    int? youth,
+    int? leaders,
+    String? notes,
+    String? enteredBy,
+    DateTime? enteredAt,
+    String? lastModifiedBy,
+    DateTime? lastModifiedAt,
+  }) {
+    return AttendanceRecord(
+      id: id ?? this.id,
+      date: date ?? this.date,
+      meetingType: meetingType ?? this.meetingType,
+      adults: adults ?? this.adults,
+      youth: youth ?? this.youth,
+      leaders: leaders ?? this.leaders,
+      notes: notes ?? this.notes,
+      enteredBy: enteredBy ?? this.enteredBy,
+      enteredAt: enteredAt ?? this.enteredAt,
+      lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,
+      lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
     );
   }
 }

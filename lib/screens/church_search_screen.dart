@@ -13,173 +13,184 @@ class _ChurchSearchScreenState extends State<ChurchSearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   List<DocumentSnapshot> _results = [];
   bool _isLoading = false;
-
-  String? _requestedChurchId;
-  Timestamp? _requestedAtTimestamp;
-  String? _currentChurchId;
+  String? _error;
 
   @override
-  void initState() {
-    super.initState();
-    _loadUserJoinStatus();
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
-  Future<void> _loadUserJoinStatus() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-    final data = doc.data();
-
-    if (data != null) {
+  Future<void> _searchChurches() async {
+    final search = _searchController.text.trim();
+    if (search.isEmpty) {
       setState(() {
-        _currentChurchId = data['churchId'];
-        _requestedChurchId = data['joinRequest']?['churchId'];
-        _requestedAtTimestamp = data['joinRequest']?['requestedAt'];
+        _results = [];
+        _error = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      QuerySnapshot? results;
+
+      // Check if input is a ZIP code (5 digits)
+      if (search.length == 5 && int.tryParse(search) != null) {
+        results =
+            await FirebaseFirestore.instance
+                .collection('churches')
+                .where('zipCode', isEqualTo: search)
+                .get();
+      } else {
+        // Search by name
+        results =
+            await FirebaseFirestore.instance
+                .collection('churches')
+                .where('name', isGreaterThanOrEqualTo: search.toUpperCase())
+                .where('name', isLessThan: search.toUpperCase() + 'z')
+                .get();
+      }
+
+      setState(() {
+        _results = results?.docs ?? [];
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'Error searching churches: $e';
+        _isLoading = false;
+        _results = [];
       });
     }
   }
 
-  void _searchChurches() async {
-    final search = _searchController.text.trim();
-    if (search.isEmpty) return;
-
-    setState(() => _isLoading = true);
-
-    final nameQuery = await FirebaseFirestore.instance
-        .collection('churches')
-        .where('name', isGreaterThanOrEqualTo: search)
-        .where('name', isLessThanOrEqualTo: '$search\uf8ff')
-        .get();
-
-    final zipQuery = await FirebaseFirestore.instance
-        .collection('churches')
-        .where('zipCode', isEqualTo: search)
-        .get();
-
-    final allResults = {
-      ...nameQuery.docs,
-      ...zipQuery.docs,
-    }.toList();
-
-    setState(() {
-      _results = allResults;
-      _isLoading = false;
-    });
-  }
-
-  Future<void> _requestJoin(DocumentSnapshot church) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final userId = user.uid;
-    final churchId = church.id;
-
-    final timestamp = FieldValue.serverTimestamp();
-
-    await FirebaseFirestore.instance.collection('users').doc(userId).update({
-      'joinRequest': {
-        'churchId': churchId,
-        'requestedAt': timestamp,
+  Future<void> _requestToJoin(DocumentSnapshot church) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please sign in to join a church')),
+        );
+        return;
       }
-    });
 
-    await FirebaseFirestore.instance
-        .collection('churches')
-        .doc(churchId)
-        .collection('joinRequests')
-        .doc(userId)
-        .set({
-      'userId': userId,
-      'requestedAt': timestamp,
-    });
+      // Get user's display name from their profile
+      final userDoc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .get();
 
-    _loadUserJoinStatus();
+      final userName =
+          userDoc.data()?['name'] ??
+          user.displayName ??
+          user.email?.split('@')[0] ??
+          'Anonymous';
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Join request sent to ${church['name']}')),
+      // Create join request
+      await FirebaseFirestore.instance
+          .collection('churches')
+          .doc(church.id)
+          .collection('joinRequests')
+          .doc(user.uid)
+          .set({
+            'userId': user.uid,
+            'userName': userName,
+            'userEmail': user.email,
+            'requestedAt': FieldValue.serverTimestamp(),
+            'status': 'pending',
+          });
+
+      // Update user's pending status
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).update(
+        {'pendingChurchId': church.id, 'pendingChurchName': church['name']},
       );
-    }
-  }
 
-  Future<void> _cancelJoinRequest() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null || _requestedChurchId == null) return;
-
-    final userId = user.uid;
-
-    await FirebaseFirestore.instance.collection('users').doc(userId).update({
-      'joinRequest': FieldValue.delete(),
-    });
-
-    await FirebaseFirestore.instance
-        .collection('churches')
-        .doc(_requestedChurchId)
-        .collection('joinRequests')
-        .doc(userId)
-        .delete();
-
-    _loadUserJoinStatus();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Join request cancelled.')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Join request sent to ${church['name']}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error sending join request: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error sending join request: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final requestedAt = _requestedAtTimestamp?.toDate();
-    final canCancel = requestedAt != null && now.difference(requestedAt).inSeconds >= 60;
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Find Your Church')),
+      appBar: AppBar(title: const Text('Find a Church')),
       body: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
             TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                labelText: 'Search by name or ZIP',
+                labelText: 'Search by name or ZIP code',
+                hintText: 'Enter church name or 5-digit ZIP code',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
                 suffixIcon: IconButton(
-                  icon: const Icon(Icons.search),
-                  onPressed: _searchChurches,
+                  icon: const Icon(Icons.clear),
+                  onPressed: () {
+                    _searchController.clear();
+                    _searchChurches();
+                  },
                 ),
               ),
+              onChanged: (_) => _searchChurches(),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             if (_isLoading)
-              const CircularProgressIndicator()
+              const Center(child: CircularProgressIndicator())
+            else if (_error != null)
+              Text(_error!, style: const TextStyle(color: Colors.red))
+            else if (_results.isEmpty && _searchController.text.isNotEmpty)
+              const Center(
+                child: Text(
+                  'No churches found',
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                ),
+              )
             else
               Expanded(
                 child: ListView.builder(
                   itemCount: _results.length,
                   itemBuilder: (context, index) {
-                    final doc = _results[index];
-                    final hasRequested = _requestedChurchId == doc.id;
-                    final isInChurch = _currentChurchId != null;
+                    final church = _results[index];
+                    final data = church.data() as Map<String, dynamic>;
 
-                    return ListTile(
-                      title: Text(doc['name']),
-                      subtitle: Text('ZIP: ${doc['zipCode']}'),
-                      trailing: isInChurch
-                          ? const Text('Already Joined', style: TextStyle(color: Colors.grey))
-                          : hasRequested
-                          ? canCancel
-                          ? ElevatedButton.icon(
-                        icon: const Icon(Icons.cancel),
-                        label: const Text('Cancel'),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                        onPressed: _cancelJoinRequest,
-                      )
-                          : const Text('Requested', style: TextStyle(color: Colors.grey))
-                          : ElevatedButton(
-                        onPressed: () => _requestJoin(doc),
-                        child: const Text('Request'),
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        title: Text(
+                          data['name'] ?? 'Unnamed Church',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text('ZIP: ${data['zipCode'] ?? 'N/A'}'),
+                        trailing: ElevatedButton(
+                          onPressed: () => _requestToJoin(church),
+                          child: const Text('Request to Join'),
+                        ),
                       ),
                     );
                   },

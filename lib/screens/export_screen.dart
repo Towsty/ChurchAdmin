@@ -31,32 +31,45 @@ class _ExportScreenState extends State<ExportScreen> {
   Future<void> _loadUserRole() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
-    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final doc =
+        await FirebaseFirestore.instance.collection('users').doc(uid).get();
     setState(() {
       userRole = doc.data()?['role'] ?? 'Visitor';
     });
   }
 
   Future<void> _exportData() async {
-    final snapshot = await FirebaseFirestore.instance.collection('attendance').get();
+    final snapshot =
+        await FirebaseFirestore.instance.collection('attendance').get();
 
-    final records = snapshot.docs.map((doc) {
-      final data = doc.data();
-      return AttendanceRecord.fromMap(data, doc.id);
-    }).toList();
+    final records =
+        snapshot.docs.map((doc) {
+          final data = doc.data();
+          return AttendanceRecord.fromMap(data, doc.id);
+        }).toList();
 
-    final selectedRecords = records.where((r) =>
-    r.date.year == _selectedMonth.year &&
-        r.date.month == _selectedMonth.month).toList();
+    final selectedRecords =
+        records
+            .where(
+              (r) =>
+                  r.date.year == _selectedMonth.year &&
+                  r.date.month == _selectedMonth.month,
+            )
+            .toList();
 
     if (selectedRecords.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No records found for ${DateFormat('MMMM yyyy').format(_selectedMonth)}')),
+        SnackBar(
+          content: Text(
+            'No records found for ${DateFormat('MMMM yyyy').format(_selectedMonth)}',
+          ),
+        ),
       );
       return;
     }
 
-    final filename = 'attendance_${DateFormat('yyyy_MM').format(_selectedMonth)}';
+    final filename =
+        'attendance_${DateFormat('yyyy_MM').format(_selectedMonth)}';
     final file = await _exportService.exportToCsv(selectedRecords, filename);
 
     await Share.shareXFiles([XFile(file.path)], text: 'Attendance Data Export');
@@ -90,9 +103,7 @@ class _ExportScreenState extends State<ExportScreen> {
     final displayMonth = DateFormat('MMMM yyyy').format(_selectedMonth);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Export Attendance Data'),
-      ),
+      appBar: AppBar(title: const Text('Export Attendance Data')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

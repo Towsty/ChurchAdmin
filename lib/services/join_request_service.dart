@@ -9,8 +9,11 @@ class JoinRequestService {
         return;
       }
 
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(
-          user.uid).get();
+      final userDoc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .get();
       final churchId = userDoc.data()?['churchId'];
       final role = userDoc.data()?['role'];
 

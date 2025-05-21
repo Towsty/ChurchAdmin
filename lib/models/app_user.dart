@@ -26,9 +26,10 @@ class AppUser {
       'name': name,
       'email': email,
       'churchId': churchId,
-      'role': role.name,
+      'role': role.name.toLowerCase(),
       'pending': pending,
-      'createdAt': createdAt.toIso8601String(),
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
     };
   }
 
@@ -41,13 +42,16 @@ class AppUser {
       email: map['email'] ?? '',
       churchId: map['churchId'] ?? '',
       role: UserRole.values.firstWhere(
-            (r) => r.name.toLowerCase() == (map['role'] ?? 'member').toString().toLowerCase(),
+        (r) =>
+            r.name.toLowerCase() ==
+            (map['role'] ?? 'member').toString().toLowerCase(),
         orElse: () => UserRole.Member,
       ),
       pending: map['pending'] ?? false,
-      createdAt: (map['createdAt'] is Timestamp)
-          ? (map['createdAt'] as Timestamp).toDate()
-          : DateTime.tryParse(map['createdAt'] ?? '') ?? DateTime.now(),
+      createdAt:
+          (map['createdAt'] is Timestamp)
+              ? (map['createdAt'] as Timestamp).toDate()
+              : DateTime.tryParse(map['createdAt'] ?? '') ?? DateTime.now(),
     );
   }
 }

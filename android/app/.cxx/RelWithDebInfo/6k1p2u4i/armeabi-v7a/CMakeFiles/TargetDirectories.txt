@@ -1,0 +1,2 @@
+/Users/iancarr/development/church_admin_app/android/app/.cxx/RelWithDebInfo/6k1p2u4i/armeabi-v7a/CMakeFiles/edit_cache.dir
+/Users/iancarr/development/church_admin_app/android/app/.cxx/RelWithDebInfo/6k1p2u4i/armeabi-v7a/CMakeFiles/rebuild_cache.dir

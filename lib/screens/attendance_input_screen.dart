@@ -52,7 +52,8 @@ class _AttendanceInputScreenState extends State<AttendanceInputScreen> {
   Future<void> _loadUserRole() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
-    final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final userDoc =
+        await FirebaseFirestore.instance.collection('users').doc(uid).get();
     setState(() {
       userRole = userDoc.data()?['role'] ?? 'Visitor';
     });
@@ -69,7 +70,7 @@ class _AttendanceInputScreenState extends State<AttendanceInputScreen> {
     final currentMeeting = widget.recordToEdit?.meetingType;
 
     setState(() {
-      _meetingTypes = types;
+      _meetingTypes = types.map((t) => t['name'].toString()).toList();
 
       if (currentMeeting != null && !_meetingTypes.contains(currentMeeting)) {
         _meetingTypes.add(currentMeeting);
@@ -103,9 +104,10 @@ class _AttendanceInputScreenState extends State<AttendanceInputScreen> {
         adults: adultCount,
         youth: youthCount,
         leaders: leaderCount,
-        notes: _notesController.text.trim().isEmpty
-            ? null
-            : _notesController.text.trim(),
+        notes:
+            _notesController.text.trim().isEmpty
+                ? null
+                : _notesController.text.trim(),
       );
 
       if (isEditMode && record.id != null) {
@@ -162,7 +164,9 @@ class _AttendanceInputScreenState extends State<AttendanceInputScreen> {
                 children: [
                   TextButton(
                     onPressed: _pickDate,
-                    child: Text('Date: ${_selectedDate.toLocal().toString().split(' ')[0]}'),
+                    child: Text(
+                      'Date: ${_selectedDate.toLocal().toString().split(' ')[0]}',
+                    ),
                   ),
                   const SizedBox(width: 20),
                   Expanded(
@@ -170,10 +174,17 @@ class _AttendanceInputScreenState extends State<AttendanceInputScreen> {
                       isExpanded: true,
                       value: _selectedMeeting,
                       hint: const Text('Select Meeting Type'),
-                      onChanged: (val) => setState(() => _selectedMeeting = val),
-                      items: _meetingTypes
-                          .map((type) => DropdownMenuItem(value: type, child: Text(type)))
-                          .toList(),
+                      onChanged:
+                          (val) => setState(() => _selectedMeeting = val),
+                      items:
+                          _meetingTypes
+                              .map(
+                                (type) => DropdownMenuItem(
+                                  value: type,
+                                  child: Text(type),
+                                ),
+                              )
+                              .toList(),
                     ),
                   ),
                 ],
