@@ -15,8 +15,10 @@ import 'member_landing_screen.dart';
 import '../widgets/large_button.dart';
 import '../services/join_request_service.dart';
 import '../services/role_permissions.dart';
+import '../services/auth_service.dart';
 
 final JoinRequestService _joinRequestService = JoinRequestService();
+final AuthService _authService = AuthService();
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -71,7 +73,14 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         final userData = userSnapshot.data!;
-        final userName = userData['name'] ?? 'User';
+        final firstName = userData['firstName'] ?? '';
+        final lastName = userData['lastName'] ?? '';
+        final fullName = '$firstName $lastName'.trim();
+        final userName =
+            fullName.isNotEmpty
+                ? fullName
+                : FirebaseAuth.instance.currentUser?.email?.split('@')[0] ??
+                    'User';
         final initials =
             userName.trim().isNotEmpty
                 ? userName
@@ -93,7 +102,16 @@ class _HomeScreenState extends State<HomeScreen> {
         // No church and no request
         if (!hasChurch && !hasPendingRequest) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Welcome')),
+            appBar: AppBar(
+              title: const Text('Welcome'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.logout),
+                  onPressed: () => _authService.signOut(context),
+                  tooltip: 'Logout',
+                ),
+              ],
+            ),
             body: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,

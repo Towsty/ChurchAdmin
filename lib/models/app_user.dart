@@ -4,7 +4,8 @@ enum UserRole { Admin, Leader, Member }
 
 class AppUser {
   final String uid;
-  final String name;
+  final String firstName;
+  final String lastName;
   final String email;
   final String churchId;
   final UserRole role;
@@ -13,7 +14,8 @@ class AppUser {
 
   AppUser({
     required this.uid,
-    required this.name,
+    required this.firstName,
+    required this.lastName,
     required this.email,
     required this.churchId,
     required this.role,
@@ -21,9 +23,12 @@ class AppUser {
     required this.createdAt,
   });
 
+  String get fullName => '$firstName $lastName'.trim();
+
   Map<String, dynamic> toMap() {
     return {
-      'name': name,
+      'firstName': firstName,
+      'lastName': lastName,
       'email': email,
       'churchId': churchId,
       'role': role.name.toLowerCase(),
@@ -36,9 +41,19 @@ class AppUser {
   factory AppUser.fromMap(Map<String, dynamic> map, String uid) {
     print('🔍 Building AppUser from map: $map with UID: $uid');
 
+    // Handle legacy data that might only have 'name'
+    String firstName = map['firstName'] ?? '';
+    String lastName = map['lastName'] ?? '';
+    if (firstName.isEmpty && lastName.isEmpty && map['name'] != null) {
+      final nameParts = (map['name'] as String).split(' ');
+      firstName = nameParts.first;
+      lastName = nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+    }
+
     return AppUser(
       uid: uid,
-      name: map['name'] ?? '',
+      firstName: firstName,
+      lastName: lastName,
       email: map['email'] ?? '',
       churchId: map['churchId'] ?? '',
       role: UserRole.values.firstWhere(

@@ -230,8 +230,9 @@ class _SmallGroupPortalScreenState extends State<SmallGroupPortalScreen> {
                         final authorData =
                             authorSnapshot.data?.data()
                                 as Map<String, dynamic>?;
-                        final authorName =
-                            authorData?['name'] as String? ?? 'Unknown';
+                        final firstName = authorData?['firstName'] ?? '';
+                        final lastName = authorData?['lastName'] ?? '';
+                        final authorName = '$firstName $lastName'.trim();
 
                         return Card(
                           margin: const EdgeInsets.only(bottom: 8),
@@ -406,7 +407,9 @@ class _SmallGroupPortalScreenState extends State<SmallGroupPortalScreen> {
                               );
                             },
                             child: ListTile(
-                              title: Text(authorName),
+                              title: Text(
+                                authorName.isNotEmpty ? authorName : 'Unknown',
+                              ),
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [

@@ -7,7 +7,8 @@ interface UpdateUserData {
   userId: string;
   churchId: string;
   role: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   adminId?: string;
 }
 
@@ -32,7 +33,7 @@ export const updateUserChurchMembership = functions.https.onCall(
       );
     }
 
-    const { userId, churchId, role, name } = data;
+    const { userId, churchId, role, firstName, lastName } = data;
 
     if (!userId || !churchId || !role) {
       throw new functions.https.HttpsError(
@@ -46,7 +47,8 @@ export const updateUserChurchMembership = functions.https.onCall(
       await admin.firestore().collection('users').doc(userId).update({
         churchId: churchId,
         role: role,
-        name: name,
+        firstName: firstName,
+        lastName: lastName,
         pendingChurchId: admin.firestore.FieldValue.delete(),
         pendingChurchName: admin.firestore.FieldValue.delete(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),

@@ -15,7 +15,7 @@ exports.updateUserChurchMembership = functions.https.onCall(async (data, context
     if (!adminData || adminData.role !== 'admin') {
         throw new functions.https.HttpsError('permission-denied', 'User must be an admin');
     }
-    const { userId, churchId, role, name } = data;
+    const { userId, churchId, role, firstName, lastName } = data;
     if (!userId || !churchId || !role) {
         throw new functions.https.HttpsError('invalid-argument', 'Missing required fields');
     }
@@ -24,7 +24,8 @@ exports.updateUserChurchMembership = functions.https.onCall(async (data, context
         await admin.firestore().collection('users').doc(userId).update({
             churchId: churchId,
             role: role,
-            name: name,
+            firstName: firstName,
+            lastName: lastName,
             pendingChurchId: admin.firestore.FieldValue.delete(),
             pendingChurchName: admin.firestore.FieldValue.delete(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),

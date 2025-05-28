@@ -56,12 +56,11 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
         throw Exception('Not an admin of this church');
       }
 
-      // Query the members subcollection directly
+      // Query all users that belong to this church
       final QuerySnapshot<Map<String, dynamic>> snapshot =
           await FirebaseFirestore.instance
-              .collection('churches')
-              .doc(widget.churchId)
-              .collection('members')
+              .collection('users')
+              .where('churchId', isEqualTo: widget.churchId)
               .get();
 
       if (!mounted) return;
@@ -86,9 +85,12 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
     final query = _searchQuery.toLowerCase();
     return _members.where((doc) {
       final data = doc.data();
-      final name = (data['name'] ?? '').toString().toLowerCase();
+      final firstName = (data['firstName'] ?? '').toString().toLowerCase();
+      final lastName = (data['lastName'] ?? '').toString().toLowerCase();
       final email = (data['email'] ?? '').toString().toLowerCase();
-      return name.contains(query) || email.contains(query);
+      return firstName.contains(query) ||
+          lastName.contains(query) ||
+          email.contains(query);
     }).toList();
   }
 
@@ -104,9 +106,8 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
       body: StreamBuilder<QuerySnapshot>(
         stream:
             FirebaseFirestore.instance
-                .collection('churches')
-                .doc(widget.churchId)
-                .collection('members')
+                .collection('users')
+                .where('churchId', isEqualTo: widget.churchId)
                 .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
@@ -149,11 +150,16 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                   ? members
                   : members.where((doc) {
                     final data = doc.data() as Map<String, dynamic>;
-                    final name = (data['name'] ?? '').toString().toLowerCase();
+                    final firstName =
+                        (data['firstName'] ?? '').toString().toLowerCase();
+                    final lastName =
+                        (data['lastName'] ?? '').toString().toLowerCase();
                     final email =
                         (data['email'] ?? '').toString().toLowerCase();
                     final query = _searchQuery.toLowerCase();
-                    return name.contains(query) || email.contains(query);
+                    return firstName.contains(query) ||
+                        lastName.contains(query) ||
+                        email.contains(query);
                   }).toList();
 
           return Column(
@@ -193,39 +199,38 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                   itemBuilder: (context, index) {
                     final doc = filteredMembers[index];
                     final data = doc.data() as Map<String, dynamic>;
-                    final name = data['name'] ?? 'Unknown';
+                    final firstName = data['firstName'] ?? '';
+                    final lastName = data['lastName'] ?? '';
+                    final fullName = '$firstName $lastName'.trim();
+                    final displayName =
+                        fullName.isNotEmpty ? fullName : 'Unknown';
                     final email = data['email'] ?? '';
                     final role =
                         (data['role'] ?? 'member').toString().toLowerCase();
 
                     return Card(
-                      margin: const EdgeInsets.only(bottom: 16),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: Colors.grey.shade200,
+                          backgroundColor: Theme.of(context).primaryColor,
                           child: Text(
-                            name.toString().characters.take(2).toString(),
-                            style: const TextStyle(color: Colors.black54),
+                            displayName.substring(0, 1).toUpperCase(),
+                            style: const TextStyle(color: Colors.white),
                           ),
                         ),
-                        title: Text(name),
+                        title: Text(displayName),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(email),
-                            const SizedBox(height: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade200,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                role,
-                                style: const TextStyle(fontSize: 12),
+                            Text(
+                              'Role: ${role[0].toUpperCase()}${role.substring(1)}',
+                              style: TextStyle(
+                                color:
+                                    role == 'admin'
+                                        ? Colors.red
+                                        : role == 'leader'
+                                        ? Colors.blue
+                                        : Colors.grey,
                               ),
                             ),
                           ],
@@ -233,13 +238,14 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                         trailing: PopupMenuButton<String>(
                           onSelected: (value) async {
                             if (value == 'remove') {
-                              final confirmed = await showDialog<bool>(
+                              // Show confirmation dialog
+                              final confirm = await showDialog<bool>(
                                 context: context,
                                 builder:
                                     (context) => AlertDialog(
                                       title: const Text('Remove Member'),
                                       content: Text(
-                                        'Are you sure you want to remove $name?',
+                                        'Are you sure you want to remove $displayName from the church?',
                                       ),
                                       actions: [
                                         TextButton(
@@ -261,73 +267,77 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                                     ),
                               );
 
-                              if (confirmed == true) {
+                              if (confirm == true) {
                                 try {
                                   await FirebaseFirestore.instance
-                                      .collection('churches')
-                                      .doc(widget.churchId)
-                                      .collection('members')
+                                      .collection('users')
                                       .doc(doc.id)
-                                      .delete();
+                                      .update({
+                                        'churchId': null,
+                                        'role': 'member',
+                                      });
 
-                                  if (!mounted) return;
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'Successfully removed $displayName',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Error: $e'),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                  }
+                                }
+                              }
+                            } else if (value.startsWith('role_')) {
+                              final newRole = value.substring(5);
+                              try {
+                                await FirebaseFirestore.instance
+                                    .collection('users')
+                                    .doc(doc.id)
+                                    .update({'role': newRole});
+
+                                if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text(
-                                        'Removed $name from church',
+                                        'Updated ${displayName}\'s role to ${newRole[0].toUpperCase()}${newRole.substring(1)}',
                                       ),
                                     ),
                                   );
-                                } catch (e) {
-                                  if (!mounted) return;
+                                }
+                              } catch (e) {
+                                if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text(
-                                        'Error removing member: $e',
-                                      ),
+                                      content: Text('Error: $e'),
                                       backgroundColor: Colors.red,
                                     ),
                                   );
                                 }
-                              }
-                            } else {
-                              try {
-                                await FirebaseFirestore.instance
-                                    .collection('churches')
-                                    .doc(widget.churchId)
-                                    .collection('members')
-                                    .doc(doc.id)
-                                    .update({'role': value});
-
-                                if (!mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Updated $name to $value'),
-                                  ),
-                                );
-                              } catch (e) {
-                                if (!mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Error updating role: $e'),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
                               }
                             }
                           },
                           itemBuilder:
                               (context) => [
                                 const PopupMenuItem(
-                                  value: 'admin',
+                                  value: 'role_admin',
                                   child: Text('Make Admin'),
                                 ),
                                 const PopupMenuItem(
-                                  value: 'leader',
+                                  value: 'role_leader',
                                   child: Text('Make Leader'),
                                 ),
                                 const PopupMenuItem(
-                                  value: 'member',
+                                  value: 'role_member',
                                   child: Text('Make Member'),
                                 ),
                                 const PopupMenuDivider(),

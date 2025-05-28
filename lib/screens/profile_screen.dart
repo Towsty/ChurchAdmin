@@ -6,12 +6,15 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../services/profile_service.dart';
 import '../services/group_service.dart';
+import '../services/image_compression_service.dart';
 import '../screens/manage_small_groups_screen.dart';
 import '../screens/manage_communication_groups_screen.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_storage/firebase_storage.dart';
 import '../services/notification_service.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
+import '../services/auth_service.dart';
+import '../widgets/loading_overlay.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -34,12 +37,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _profileService = ProfileService();
   final _groupService = GroupService();
   final _notificationService = NotificationService();
-  bool _isLoading = false;
+  bool _isLoading = true;
+  final _authService = AuthService();
 
   final _phoneMaskFormatter = MaskTextInputFormatter(
     mask: '(###) ###-####',
     filter: {"#": RegExp(r'[0-9]')},
   );
+
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
+  final _emailController = TextEditingController();
+
+  bool _isSaving = false;
+  String? _error;
 
   // Add validation methods
   String? _validatePhone(String? value) {
@@ -73,6 +84,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void dispose() {
     _phoneController.dispose();
     _addressController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _emailController.dispose();
     super.dispose();
   }
 
@@ -88,6 +102,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       setState(() {
         userData = profile;
+        // Handle first and last name
+        if (profile != null) {
+          // Check for old name format
+          if (profile['name'] != null &&
+              profile['firstName'] == null &&
+              profile['lastName'] == null) {
+            final nameParts = profile['name'].toString().split(' ');
+            _firstNameController.text = nameParts.first;
+            _lastNameController.text =
+                nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+          } else {
+            _firstNameController.text = profile['firstName'] ?? '';
+            _lastNameController.text = profile['lastName'] ?? '';
+          }
+          _emailController.text = profile['email'] ?? '';
+        }
+
         // Format the phone number if it exists
         if (userData?['phone'] != null && userData!['phone'].isNotEmpty) {
           final digitsOnly = userData!['phone'].replaceAll(RegExp(r'\D'), '');
@@ -155,26 +186,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         // Convert XFile to File
         final File imageFile = File(pickedImage.path);
 
-        // Create a temporary file for the compressed image
-        final String tempPath = '${imageFile.path}_compressed.jpg';
+        // Compress the image using the service
+        final File? compressedFile =
+            await ImageCompressionService.compressImage(imageFile);
 
-        // Compress the image
-        final XFile? compressedXFile =
-            await FlutterImageCompress.compressAndGetFile(
-              imageFile.path,
-              tempPath,
-              quality: 85,
-              minWidth: 500,
-              minHeight: 500,
-              rotate: 0,
-            );
-
-        if (compressedXFile == null) {
-          throw Exception('Failed to compress image');
+        if (compressedFile == null) {
+          throw Exception('Failed to process image');
         }
-
-        // Convert XFile to File for upload
-        final File compressedFile = File(compressedXFile.path);
 
         // Generate a unique filename
         final String fileName =
@@ -184,7 +202,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             .child('profile_photos')
             .child(fileName);
 
-        // Upload the compressed file
+        // Upload the file
         final UploadTask uploadTask = storageRef.putFile(
           compressedFile,
           SettableMetadata(contentType: 'image/jpeg'),
@@ -206,18 +224,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _profileImage = compressedFile;
         });
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Profile photo updated successfully')),
-          );
-        }
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile photo updated successfully')),
+        );
       } catch (e) {
         print('Error uploading image: $e');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error updating profile photo: $e')),
-          );
-        }
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error updating profile photo: $e')),
+        );
       } finally {
         if (mounted) {
           setState(() {
@@ -231,40 +247,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isSaving = true;
+      _error = null;
+    });
 
     try {
-      // Get the unformatted phone number (just digits)
-      final phoneNumber = _phoneController.text.replaceAll(RegExp(r'\D'), '');
+      final user = _authService.currentUser;
+      if (user == null) {
+        throw Exception('No user logged in');
+      }
 
-      await _profileService.updateProfile(
-        userId: user!.uid,
-        profileData: {'phone': phoneNumber, 'address': _addressController.text},
+      await _authService.updateProfile(
+        uid: user.uid,
+        firstName: _firstNameController.text.trim(),
+        lastName: _lastNameController.text.trim(),
+        email: _emailController.text.trim(),
       );
-
-      // Check profile completion after update
-      await _notificationService.checkProfileCompletion(user!.uid, {
-        'phone': phoneNumber,
-        'address': _addressController.text,
-      });
-
-      setState(() {
-        _isEditing = false;
-      });
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profile updated successfully')),
       );
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error updating profile: $e')));
+      setState(() => _error = e.toString());
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      setState(() => _isSaving = false);
     }
   }
 
@@ -278,272 +286,319 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    final firstName = userData?['firstName'] as String? ?? '';
+    final lastName = userData?['lastName'] as String? ?? '';
+    final fullName = '$firstName $lastName'.trim();
     final userName =
-        userData?['name'] ??
-        user?.displayName ??
-        user?.email?.split('@')[0] ??
-        'User';
+        fullName.isNotEmpty
+            ? fullName
+            : userData?['name'] as String? ??
+                user?.displayName ??
+                user?.email?.split('@')[0] ??
+                'User';
     final email = user?.email ?? 'No email provided';
     final role = (userData?['role'] ?? 'visitor').toString();
     final capitalizedRole = role[0].toUpperCase() + role.substring(1);
     final photoUrl = userData?['photoUrl'];
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile'),
-        actions: [
-          IconButton(
-            icon: Icon(_isEditing ? Icons.save : Icons.edit),
-            onPressed:
-                _isLoading
-                    ? null
-                    : () {
-                      if (_isEditing) {
-                        _saveProfile();
-                      } else {
-                        setState(() => _isEditing = true);
-                      }
-                    },
-          ),
-        ],
-      ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            const SizedBox(height: 20),
-            GestureDetector(
-              onTap: _isEditing ? _pickImage : null,
-              child: Stack(
-                children: [
-                  CircleAvatar(
-                    radius: 50,
-                    backgroundColor: Colors.grey.shade200,
-                    backgroundImage:
-                        photoUrl != null
-                            ? NetworkImage(photoUrl) as ImageProvider
-                            : _profileImage != null
-                            ? FileImage(_profileImage!)
-                            : null,
-                    child:
-                        photoUrl == null && _profileImage == null
-                            ? Text(
-                              userName.substring(0, 2).toUpperCase(),
-                              style: const TextStyle(
-                                fontSize: 32,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black54,
-                              ),
-                            )
-                            : null,
-                  ),
-                  if (_isEditing)
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).primaryColor,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.camera_alt,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildInfoRow(
-                      icon: Icons.person,
-                      label: 'Name',
-                      value: userName,
-                    ),
-                    const Divider(),
-                    _buildInfoRow(
-                      icon: Icons.email,
-                      label: 'Email',
-                      value: email,
-                    ),
-                    const Divider(),
-                    _buildInfoRow(
-                      icon: Icons.badge,
-                      label: 'Role',
-                      value: capitalizedRole,
-                    ),
-                    if (churchName != null) ...[
-                      const Divider(),
-                      _buildInfoRow(
-                        icon: Icons.church,
-                        label: 'Church',
-                        value: churchName!,
-                      ),
-                    ],
-                    const Divider(),
-                    _buildEditableField(
-                      icon: Icons.phone,
-                      label: 'Phone',
-                      controller: _phoneController,
-                      keyboardType: TextInputType.phone,
-                      validator: _validatePhone,
-                      inputFormatters: [_phoneMaskFormatter],
-                    ),
-                    const Divider(),
-                    _buildEditableField(
-                      icon: Icons.location_on,
-                      label: 'Address',
-                      controller: _addressController,
-                      maxLines: 2,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Small Groups',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        if (_isEditing)
-                          IconButton(
-                            icon: const Icon(Icons.add),
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder:
-                                      (context) => ManageSmallGroupsScreen(
-                                        churchId: userData!['churchId'],
-                                      ),
-                                ),
-                              );
-                            },
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    if (_smallGroups.isEmpty)
-                      const Text('No small groups joined')
-                    else
-                      Wrap(
-                        spacing: 8,
-                        children:
-                            _smallGroups
-                                .map(
-                                  (group) => Chip(
-                                    label: Text(group),
-                                    onDeleted:
-                                        _isEditing
-                                            ? () {
-                                              // TODO: Remove from small group
-                                            }
-                                            : null,
-                                  ),
-                                )
-                                .toList(),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Communication Groups',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        if (_isEditing)
-                          IconButton(
-                            icon: const Icon(Icons.add),
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder:
-                                      (context) =>
-                                          ManageCommunicationGroupsScreen(
-                                            churchId: userData!['churchId'],
-                                          ),
-                                ),
-                              );
-                            },
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    if (_communicationGroups.isEmpty)
-                      const Text('No communication groups joined')
-                    else
-                      Wrap(
-                        spacing: 8,
-                        children:
-                            _communicationGroups
-                                .map(
-                                  (group) => Chip(
-                                    label: Text(group),
-                                    onDeleted:
-                                        _isEditing
-                                            ? () {
-                                              // TODO: Remove from communication group
-                                            }
-                                            : null,
-                                  ),
-                                )
-                                .toList(),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final user = FirebaseAuth.instance.currentUser;
-                if (user != null) {
-                  await NotificationService().createNotification(
-                    userId: user.uid,
-                    title: 'Test Notification',
-                    message: 'This is a test notification.',
-                    type: 'test',
-                  );
-                }
-              },
-              child: Text('Create Test Notification'),
+    return LoadingOverlay(
+      isLoading: _isLoading,
+      message: 'Loading profile...',
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Profile'),
+          actions: [
+            IconButton(
+              icon: Icon(_isEditing ? Icons.save : Icons.edit),
+              onPressed:
+                  _isSaving
+                      ? null
+                      : () {
+                        if (_isEditing) {
+                          _saveProfile();
+                        } else {
+                          setState(() => _isEditing = true);
+                        }
+                      },
             ),
           ],
+        ),
+        body: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 20),
+                GestureDetector(
+                  onTap: _isEditing ? _pickImage : null,
+                  child: Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 50,
+                        backgroundColor: Colors.grey.shade200,
+                        backgroundImage:
+                            photoUrl != null
+                                ? NetworkImage(photoUrl) as ImageProvider
+                                : _profileImage != null
+                                ? FileImage(_profileImage!)
+                                : null,
+                        child:
+                            photoUrl == null && _profileImage == null
+                                ? Text(
+                                  userName.substring(0, 2).toUpperCase(),
+                                  style: const TextStyle(
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black54,
+                                  ),
+                                )
+                                : null,
+                      ),
+                      if (_isEditing)
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).primaryColor,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.camera_alt,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 32),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (_isEditing) ...[
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _firstNameController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'First Name',
+                                    icon: Icon(Icons.person),
+                                  ),
+                                  validator:
+                                      (value) =>
+                                          value == null || value.trim().isEmpty
+                                              ? 'Required'
+                                              : null,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _lastNameController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Last Name',
+                                    icon: Icon(Icons.person_outline),
+                                  ),
+                                  validator:
+                                      (value) =>
+                                          value == null || value.trim().isEmpty
+                                              ? 'Required'
+                                              : null,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ] else
+                          _buildInfoRow(
+                            icon: Icons.person,
+                            label: 'Name',
+                            value: userName,
+                          ),
+                        const Divider(),
+                        _buildInfoRow(
+                          icon: Icons.email,
+                          label: 'Email',
+                          value: email,
+                        ),
+                        const Divider(),
+                        _buildInfoRow(
+                          icon: Icons.badge,
+                          label: 'Role',
+                          value: capitalizedRole,
+                        ),
+                        if (churchName != null) ...[
+                          const Divider(),
+                          _buildInfoRow(
+                            icon: Icons.church,
+                            label: 'Church',
+                            value: churchName!,
+                          ),
+                        ],
+                        const Divider(),
+                        _buildEditableField(
+                          icon: Icons.phone,
+                          label: 'Phone',
+                          controller: _phoneController,
+                          keyboardType: TextInputType.phone,
+                          validator: _validatePhone,
+                          inputFormatters: [_phoneMaskFormatter],
+                        ),
+                        const Divider(),
+                        _buildEditableField(
+                          icon: Icons.location_on,
+                          label: 'Address',
+                          controller: _addressController,
+                          maxLines: 2,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Small Groups',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            if (_isEditing)
+                              IconButton(
+                                icon: const Icon(Icons.add),
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder:
+                                          (context) => ManageSmallGroupsScreen(
+                                            churchId: userData!['churchId'],
+                                          ),
+                                    ),
+                                  );
+                                },
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        if (_smallGroups.isEmpty)
+                          const Text('No small groups joined')
+                        else
+                          Wrap(
+                            spacing: 8,
+                            children:
+                                _smallGroups
+                                    .map(
+                                      (group) => Chip(
+                                        label: Text(group),
+                                        onDeleted:
+                                            _isEditing
+                                                ? () {
+                                                  // TODO: Remove from small group
+                                                }
+                                                : null,
+                                      ),
+                                    )
+                                    .toList(),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Communication Groups',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            if (_isEditing)
+                              IconButton(
+                                icon: const Icon(Icons.add),
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder:
+                                          (context) =>
+                                              ManageCommunicationGroupsScreen(
+                                                churchId: userData!['churchId'],
+                                              ),
+                                    ),
+                                  );
+                                },
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        if (_communicationGroups.isEmpty)
+                          const Text('No communication groups joined')
+                        else
+                          Wrap(
+                            spacing: 8,
+                            children:
+                                _communicationGroups
+                                    .map(
+                                      (group) => Chip(
+                                        label: Text(group),
+                                        onDeleted:
+                                            _isEditing
+                                                ? () {
+                                                  // TODO: Remove from communication group
+                                                }
+                                                : null,
+                                      ),
+                                    )
+                                    .toList(),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final user = FirebaseAuth.instance.currentUser;
+                    if (user != null) {
+                      await NotificationService().createNotification(
+                        userId: user.uid,
+                        title: 'Test Notification',
+                        message: 'This is a test notification.',
+                        type: 'test',
+                      );
+                    }
+                  },
+                  child: Text('Create Test Notification'),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

@@ -6,7 +6,8 @@ class JoinRequestApprovalScreen extends StatefulWidget {
   const JoinRequestApprovalScreen({super.key});
 
   @override
-  State<JoinRequestApprovalScreen> createState() => _JoinRequestApprovalScreenState();
+  State<JoinRequestApprovalScreen> createState() =>
+      _JoinRequestApprovalScreenState();
 }
 
 class _JoinRequestApprovalScreenState extends State<JoinRequestApprovalScreen> {
@@ -22,7 +23,8 @@ class _JoinRequestApprovalScreenState extends State<JoinRequestApprovalScreen> {
   Future<void> _loadChurchId() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
-    final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final userDoc =
+        await FirebaseFirestore.instance.collection('users').doc(uid).get();
     final data = userDoc.data();
     if (data != null && data['churchId'] != null) {
       setState(() => _churchId = data['churchId']);
@@ -30,7 +32,8 @@ class _JoinRequestApprovalScreenState extends State<JoinRequestApprovalScreen> {
   }
 
   Future<Map<String, dynamic>?> _getUserDetails(String userId) async {
-    final doc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+    final doc =
+        await FirebaseFirestore.instance.collection('users').doc(userId).get();
     return doc.data();
   }
 
@@ -50,18 +53,17 @@ class _JoinRequestApprovalScreenState extends State<JoinRequestApprovalScreen> {
           .delete();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('✅ Approved $userId as $role')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('✅ Approved $userId as $role')));
       }
     } catch (e) {
       print('❌ Error approving request: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ Error approving: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('❌ Error approving: $e')));
     }
   }
-
 
   Future<void> _rejectRequest(String userId) async {
     try {
@@ -83,18 +85,16 @@ class _JoinRequestApprovalScreenState extends State<JoinRequestApprovalScreen> {
       }
     } catch (e) {
       print('❌ Error rejecting request: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ Error rejecting: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('❌ Error rejecting: $e')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_churchId == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     final joinRequestsRef = FirebaseFirestore.instance
@@ -131,12 +131,14 @@ class _JoinRequestApprovalScreenState extends State<JoinRequestApprovalScreen> {
                   }
 
                   final userData = userSnapshot.data!;
-                  final userName = userData['name'] ?? 'Unknown';
+                  final firstName = userData['firstName'] ?? '';
+                  final lastName = userData['lastName'] ?? '';
+                  final fullName = '$firstName $lastName'.trim();
                   final userEmail = userData['email'] ?? '';
                   final selectedRole = _selectedRoles[userId] ?? 'member';
 
                   return ListTile(
-                    title: Text(userName),
+                    title: Text(fullName.isNotEmpty ? fullName : 'Unknown'),
                     subtitle: Text(userEmail),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,

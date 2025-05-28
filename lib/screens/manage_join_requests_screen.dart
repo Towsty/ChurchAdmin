@@ -62,9 +62,12 @@ class _ManageJoinRequestsScreenState extends State<ManageJoinRequestsScreen> {
         throw Exception('User is not an admin');
       }
 
-      final displayName =
-          userData['userName']?.isNotEmpty == true
-              ? userData['userName']
+      final firstName = userData['firstName'] ?? '';
+      final lastName = userData['lastName'] ?? '';
+      final displayName = '$firstName $lastName'.trim();
+      final finalDisplayName =
+          displayName.isNotEmpty
+              ? displayName
               : userData['userEmail']?.split('@')[0] ?? 'Unknown User';
 
       if (action == 'approve') {
@@ -72,7 +75,8 @@ class _ManageJoinRequestsScreenState extends State<ManageJoinRequestsScreen> {
           // Step 1: Add to members collection
           print('DEBUG - Step 1: Adding to members collection');
           await membersRef.set({
-            'name': displayName,
+            'firstName': firstName,
+            'lastName': lastName,
             'email': userData['userEmail'],
             'role': role.toLowerCase(),
             'joinedAt': FieldValue.serverTimestamp(),
@@ -85,7 +89,8 @@ class _ManageJoinRequestsScreenState extends State<ManageJoinRequestsScreen> {
             await userRef.update({
               'churchId': widget.churchId,
               'role': role.toLowerCase(),
-              'name': displayName,
+              'firstName': firstName,
+              'lastName': lastName,
               'pendingChurchId': FieldValue.delete(),
               'pendingChurchName': FieldValue.delete(),
               'updatedAt': FieldValue.serverTimestamp(),
@@ -111,7 +116,7 @@ class _ManageJoinRequestsScreenState extends State<ManageJoinRequestsScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  'Successfully added $displayName as ${role.toLowerCase()}',
+                  'Successfully added $finalDisplayName as ${role.toLowerCase()}',
                 ),
                 backgroundColor: Colors.green,
               ),
@@ -131,7 +136,7 @@ class _ManageJoinRequestsScreenState extends State<ManageJoinRequestsScreen> {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Request from $displayName was denied'),
+                content: Text('Request from $finalDisplayName was denied'),
                 backgroundColor: Colors.orange,
               ),
             );
