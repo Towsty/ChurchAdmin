@@ -141,39 +141,28 @@ class AuthService {
   /// Update user profile
   Future<void> updateProfile({
     required String uid,
-    String? firstName,
-    String? lastName,
-    String? email,
+    required String firstName,
+    required String lastName,
+    required String email,
+    String? phone,
+    String? address,
   }) async {
     try {
       final userRef = _firestore.collection('users').doc(uid);
-      final updates = <String, dynamic>{
+
+      final updates = {
+        'firstName': firstName,
+        'lastName': lastName,
+        'email': email,
+        if (phone != null) 'phone': phone,
+        if (address != null) 'address': address,
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      if (firstName != null) updates['firstName'] = firstName;
-      if (lastName != null) updates['lastName'] = lastName;
-      if (email != null) updates['email'] = email;
-
       await userRef.update(updates);
-
-      // Update display name in Firebase Auth if name changed
-      if (firstName != null || lastName != null) {
-        final currentData =
-            (await userRef.get()).data() as Map<String, dynamic>;
-        final newFirstName = firstName ?? currentData['firstName'] as String;
-        final newLastName = lastName ?? currentData['lastName'] as String;
-        await _auth.currentUser?.updateDisplayName(
-          '$newFirstName $newLastName',
-        );
-      }
-
-      // Update email in Firebase Auth if changed
-      if (email != null) {
-        await _auth.currentUser?.updateEmail(email);
-      }
     } catch (e) {
-      throw _handleAuthException(e);
+      print('Error updating profile: $e');
+      throw Exception('Failed to update profile: $e');
     }
   }
 

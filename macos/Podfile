@@ -1,4 +1,4 @@
-platform :osx, '10.14'
+platform :osx, '11.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -28,8 +28,20 @@ flutter_macos_podfile_setup
 
 target 'Runner' do
   use_frameworks!
-
+  
+  # Exclude Firebase-related pods
+  pod 'firebase_core', :path => File.join('Flutter', 'ephemeral', '.symlinks', 'plugins', 'firebase_core', 'macos'), :inhibit_warnings => true
+  pod 'firebase_auth', :path => File.join('Flutter', 'ephemeral', '.symlinks', 'plugins', 'firebase_auth', 'macos'), :inhibit_warnings => true
+  pod 'cloud_firestore', :path => File.join('Flutter', 'ephemeral', '.symlinks', 'plugins', 'cloud_firestore', 'macos'), :inhibit_warnings => true
+  pod 'cloud_functions', :path => File.join('Flutter', 'ephemeral', '.symlinks', 'plugins', 'cloud_functions', 'macos'), :inhibit_warnings => true
+  pod 'firebase_storage', :path => File.join('Flutter', 'ephemeral', '.symlinks', 'plugins', 'firebase_storage', 'macos'), :inhibit_warnings => true
+  
+  # Install other Flutter plugins
   flutter_install_all_macos_pods File.dirname(File.realpath(__FILE__))
+  
+  # Override BoringSSL-GRPC configuration
+  pod 'BoringSSL-GRPC', :modular_headers => true, :inhibit_warnings => true
+  
   target 'RunnerTests' do
     inherit! :search_paths
   end
@@ -38,5 +50,37 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_macos_build_settings(target)
+    
+    target.build_configurations.each do |config|
+      config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '11.0'
+      config.build_settings['ENABLE_BITCODE'] = 'NO'
+      config.build_settings['ONLY_ACTIVE_ARCH'] = 'YES'
+      
+      # Disable warnings for Firebase pods
+      if target.name.start_with?('Firebase') || target.name.include?('gRPC') || target.name.include?('BoringSSL')
+        config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
+        config.build_settings['CLANG_WARN_DOCUMENTATION_COMMENTS'] = 'NO'
+        config.build_settings['SWIFT_SUPPRESS_WARNINGS'] = 'YES'
+      end
+      
+      # Special handling for BoringSSL-GRPC
+      if target.name == 'BoringSSL-GRPC'
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = ['$(inherited)', 'BORINGSSL_PREFIX=BoringSSL', 'OPENSSL_NO_ASM']
+        config.build_settings['WARNING_CFLAGS'] = ['$(inherited)', '-Wno-shorten-64-to-32', '-Wno-comma', '-Wno-unreachable-code']
+        config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
+        config.build_settings['CLANG_WARN_DOCUMENTATION_COMMENTS'] = 'NO'
+        config.build_settings['OTHER_CFLAGS'] = ['$(inherited)']
+        config.build_settings['USE_HEADERMAP'] = 'NO'
+      end
+      
+      # Fix warnings about script phases
+      if ['gRPC-Core', 'gRPC-C++', 'abseil', 'BoringSSL-GRPC'].include?(target.name)
+        target.build_phases.each do |phase|
+          if phase.respond_to?(:name) && phase.name == 'Create Symlinks to Header Folders'
+            phase.always_out_of_date = '1'
+          end
+        end
+      end
+    end
   end
 end

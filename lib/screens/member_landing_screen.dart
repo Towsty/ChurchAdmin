@@ -1054,20 +1054,22 @@ class _MemberLandingScreenState extends State<MemberLandingScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.check_circle_outline),
-                        tooltip: 'Take Attendance',
-                        onPressed: () {
-                          Navigator.pushNamed(context, '/attendance');
-                        },
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.history),
-                        tooltip: 'Past Attendance',
-                        onPressed: () {
-                          Navigator.pushNamed(context, '/attendance-history');
-                        },
-                      ),
+                      if (RolePermissions.canTakeAttendance(userRole))
+                        IconButton(
+                          icon: const Icon(Icons.check_circle_outline),
+                          tooltip: 'Take Attendance',
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/attendance');
+                          },
+                        ),
+                      if (RolePermissions.canViewAttendance(userRole))
+                        IconButton(
+                          icon: const Icon(Icons.history),
+                          tooltip: 'Past Attendance',
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/attendance-history');
+                          },
+                        ),
                       IconButton(
                         icon: const Icon(Icons.book),
                         tooltip: 'Devotionals',
@@ -1084,13 +1086,14 @@ class _MemberLandingScreenState extends State<MemberLandingScreen> {
                           );
                         },
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.file_download),
-                        tooltip: 'Export Data',
-                        onPressed: () {
-                          Navigator.pushNamed(context, '/export');
-                        },
-                      ),
+                      if (RolePermissions.canExportAttendance(userRole))
+                        IconButton(
+                          icon: const Icon(Icons.file_download),
+                          tooltip: 'Export Data',
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/export');
+                          },
+                        ),
                       if (RolePermissions.canAccessAdminPortal(userRole))
                         IconButton(
                           icon: const Icon(Icons.admin_panel_settings),

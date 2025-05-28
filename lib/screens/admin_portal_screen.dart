@@ -9,6 +9,7 @@ import 'church_settings_screen.dart';
 import 'manage_join_requests_screen.dart';
 import 'small_groups_admin_screen.dart';
 import 'manage_meetings_screen.dart';
+import 'super_admin_screen.dart';
 
 class AdminPortalScreen extends StatefulWidget {
   final String churchId;
@@ -36,11 +37,10 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
 
   Future<void> _loadUserRole() async {
     if (user == null) return;
-    final doc =
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user!.uid)
-            .get();
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user!.uid)
+        .get();
     setState(() {
       userRole = doc.data()?['role']?.toString().toLowerCase() ?? 'visitor';
     });
@@ -58,6 +58,125 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
       );
     }
 
+    final adminCards = [
+      _AdminCard(
+        title: 'Join Requests',
+        icon: Icons.person_add,
+        color: Colors.teal,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  ManageJoinRequestsScreen(churchId: widget.churchId),
+            ),
+          );
+        },
+      ),
+      _AdminCard(
+        title: 'Member Management',
+        icon: Icons.people,
+        color: Colors.blue,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  ManageMembersScreen(churchId: widget.churchId),
+            ),
+          );
+        },
+      ),
+      _AdminCard(
+        title: 'Meeting Types',
+        icon: Icons.calendar_today,
+        color: Colors.green,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const MeetingTypeManager(),
+            ),
+          );
+        },
+      ),
+      _AdminCard(
+        title: 'Manage Meetings',
+        icon: Icons.event,
+        color: Colors.purple,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  ManageMeetingsScreen(churchId: widget.churchId),
+            ),
+          );
+        },
+      ),
+      _AdminCard(
+        title: 'Small Groups',
+        icon: Icons.groups,
+        color: Colors.indigo,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  SmallGroupsAdminScreen(churchId: widget.churchId),
+            ),
+          );
+        },
+      ),
+      _AdminCard(
+        title: 'Announcements',
+        icon: Icons.announcement,
+        color: Colors.orange,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  ManageAnnouncementsScreen(churchId: widget.churchId),
+            ),
+          );
+        },
+      ),
+      _AdminCard(
+        title: 'Church Settings',
+        icon: Icons.settings,
+        color: Colors.purple,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  ChurchSettingsScreen(churchId: widget.churchId),
+            ),
+          );
+        },
+      ),
+    ];
+
+    // Add Super Admin card if user has super admin role
+    if (RolePermissions.canAccessSuperAdmin(userRole!)) {
+      adminCards.add(
+        _AdminCard(
+          title: 'Church Management',
+          icon: Icons.admin_panel_settings,
+          color: Colors.red,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const SuperAdminScreen(),
+              ),
+            );
+          },
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(title: Text('${widget.churchName} Admin')),
       body: GridView.count(
@@ -65,111 +184,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
         padding: const EdgeInsets.all(16),
         mainAxisSpacing: 16,
         crossAxisSpacing: 16,
-        children: [
-          _AdminCard(
-            title: 'Join Requests',
-            icon: Icons.person_add,
-            color: Colors.teal,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder:
-                      (context) =>
-                          ManageJoinRequestsScreen(churchId: widget.churchId),
-                ),
-              );
-            },
-          ),
-          _AdminCard(
-            title: 'Member Management',
-            icon: Icons.people,
-            color: Colors.blue,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder:
-                      (context) =>
-                          ManageMembersScreen(churchId: widget.churchId),
-                ),
-              );
-            },
-          ),
-          _AdminCard(
-            title: 'Meeting Types',
-            icon: Icons.calendar_today,
-            color: Colors.green,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const MeetingTypeManager(),
-                ),
-              );
-            },
-          ),
-          _AdminCard(
-            title: 'Manage Meetings',
-            icon: Icons.event,
-            color: Colors.purple,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder:
-                      (context) =>
-                          ManageMeetingsScreen(churchId: widget.churchId),
-                ),
-              );
-            },
-          ),
-          _AdminCard(
-            title: 'Small Groups',
-            icon: Icons.groups,
-            color: Colors.indigo,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder:
-                      (context) =>
-                          SmallGroupsAdminScreen(churchId: widget.churchId),
-                ),
-              );
-            },
-          ),
-          _AdminCard(
-            title: 'Announcements',
-            icon: Icons.announcement,
-            color: Colors.orange,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder:
-                      (context) =>
-                          ManageAnnouncementsScreen(churchId: widget.churchId),
-                ),
-              );
-            },
-          ),
-          _AdminCard(
-            title: 'Church Settings',
-            icon: Icons.settings,
-            color: Colors.purple,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder:
-                      (context) =>
-                          ChurchSettingsScreen(churchId: widget.churchId),
-                ),
-              );
-            },
-          ),
-        ],
+        children: adminCards,
       ),
     );
   }

@@ -11,9 +11,19 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
+    function isSuper() {
+      let userData = getUserData();
+      return userData != null && userData.role == 'super';
+    }
+
     function isAdmin() {
       let userData = getUserData();
       return userData != null && userData.role == 'admin';
+    }
+
+    function isLeader() {
+      let userData = getUserData();
+      return userData != null && userData.role == 'leader';
     }
 
     function userChurchId() {
@@ -38,21 +48,31 @@ service cloud.firestore {
 
     // Users collection
     match /users/{userId} {
-      // Super simple admin rule - if you're an admin, you get full access to users in your church
       allow read: if isSignedIn() && 
         (
+          isSuper() ||  // Super users can read all
           request.auth.uid == userId ||  // Users can read their own data
-          (isAdmin() && resource.data.churchId == userChurchId())  // Admins can read all users in their church
+          (isAdmin() && resource.data.churchId == userChurchId()) ||  // Admins can read all users in their church
+          (isChurchMember(resource.data.churchId)) // Members can read other members in their church
         );
       
-      // Allow users to create their own initial document and admins to manage users in their church
-      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && (isSuper() || request.auth.uid == userId);
       allow update: if isSignedIn() && 
         (
-          (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'churchId'])) ||  // Users can update their own non-critical fields
-          (isAdmin() && (resource == null || resource.data.churchId == userChurchId()))  // Admins can update users in their church
+          isSuper() ||  // Super users can do anything
+          (request.auth.uid == userId && (
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'churchId']) || // Users can't change role or churchId
+            request.resource.data.diff(resource.data).affectedKeys().hasAll(['phone', 'address', 'firstName', 'lastName']) // But they can update their profile fields
+          )) ||
+          (isAdmin() && (resource == null || resource.data.churchId == userChurchId()) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']))  // Admins can update users in their church except roles
         );
-      allow delete: if isSignedIn() && isAdmin() && resource.data.churchId == userChurchId();
+      allow delete: if isSignedIn() && (isSuper() || (isAdmin() && resource.data.churchId == userChurchId()));
+
+      // Allow list queries for users in the same church
+      allow list: if isSignedIn() && (
+        isSuper() ||  // Super users can list all
+        (isChurchMember(resource.data.churchId) && resource.data.churchId == userChurchId())  // Members can list users in their church
+      );
     }
 
     // Notifications collection
@@ -74,15 +94,9 @@ service cloud.firestore {
 
     // Churches collection
     match /churches/{churchId} {
-      // Anyone signed in can read basic church data and search
       allow read: if isSignedIn();
-      allow list: if isSignedIn();
-      
-      // Allow creation of new churches by authenticated users
-      allow create: if isSignedIn();
-      
-      // Only admins can modify existing church data
-      allow update, delete: if isSignedIn() && isAdmin() && churchId == userChurchId();
+      allow create: if isSignedIn() && (isSuper() || isAdmin());
+      allow update, delete: if isSignedIn() && (isSuper() || (isAdmin() && churchId == userChurchId()));
 
       // Small Groups subcollection
       match /smallGroups/{groupId} {
@@ -91,98 +105,98 @@ service cloud.firestore {
           return group != null && request.auth.uid == group.leaderId;
         }
 
-        // Members can read small groups in their church
+        function isGroupMember() {
+          let group = get(/databases/$(database)/documents/churches/$(churchId)/smallGroups/$(groupId)).data;
+          return group != null && request.auth.uid in group.members;
+        }
+
         allow read: if isSignedIn() && churchId == userChurchId();
-        
-        // Admins can manage small groups in their church
-        // Group leaders can update their own groups (for managing members)
-        allow create: if isSignedIn() && isAdmin() && churchId == userChurchId();
-        allow update: if isSignedIn() && churchId == userChurchId() && (isAdmin() || isGroupLeader());
-        allow delete: if isSignedIn() && isAdmin() && churchId == userChurchId();
+        allow create: if isSignedIn() && (isSuper() || (isAdmin() && churchId == userChurchId()));
+        allow update: if isSignedIn() && (
+          isSuper() ||
+          (isAdmin() && churchId == userChurchId()) ||
+          (isLeader() && isGroupLeader())
+        );
+        allow delete: if isSignedIn() && (isSuper() || (isAdmin() && churchId == userChurchId()));
 
         // Posts subcollection
         match /posts/{postId} {
-          function isGroupMember() {
-            let group = get(/databases/$(database)/documents/churches/$(churchId)/smallGroups/$(groupId)).data;
-            return group != null && (
-              request.auth.uid in group.members || 
-              request.auth.uid == group.leaderId
-            );
-          }
-
-          // Members of the group can read posts
-          allow read: if isSignedIn() && churchId == userChurchId() && isGroupMember();
-          
-          // Group leaders and admins can create/update/delete posts
-          allow create, update, delete: if isSignedIn() && churchId == userChurchId() && (
-            isAdmin() || 
-            get(/databases/$(database)/documents/churches/$(churchId)/smallGroups/$(groupId)).data.leaderId == request.auth.uid
+          allow read: if isSignedIn() && churchId == userChurchId() && (isGroupMember() || isGroupLeader());
+          allow create, update: if isSignedIn() && churchId == userChurchId() && (
+            isSuper() ||
+            isAdmin() ||
+            isGroupLeader() ||
+            (isGroupMember() && request.resource.data.type == 'member_post')
+          );
+          allow delete: if isSignedIn() && churchId == userChurchId() && (
+            isSuper() ||
+            isAdmin() ||
+            (isGroupLeader() && resource.data.authorId == request.auth.uid) ||
+            (isGroupMember() && resource.data.authorId == request.auth.uid && resource.data.type == 'member_post')
           );
         }
-      }
 
-      // Communication Groups subcollection
-      match /communicationGroups/{groupId} {
-        // Members can read communication groups in their church
-        allow read: if isSignedIn() && churchId == userChurchId();
-        
-        // Admins can manage communication groups in their church
-        allow write: if isSignedIn() && isAdmin() && churchId == userChurchId();
+        // Attendance subcollection
+        match /attendance/{recordId} {
+          allow read: if isSignedIn() && churchId == userChurchId();
+          allow create, update: if isSignedIn() && churchId == userChurchId() && (
+            isSuper() ||
+            isAdmin() ||
+            (isLeader() && isGroupLeader())
+          );
+          allow delete: if isSignedIn() && (isSuper() || (isAdmin() && churchId == userChurchId()));
+        }
       }
 
       // Devotionals subcollection
       match /devotionals/{devotionalId} {
-        // Members can read devotionals in their church
         allow read: if isSignedIn() && churchId == userChurchId();
-        
-        // Admins can manage devotionals in their church
-        allow write: if isSignedIn() && isAdmin() && churchId == userChurchId();
+        allow write: if isSignedIn() && (isSuper() || (isAdmin() && churchId == userChurchId()));
       }
 
       // Announcements subcollection
       match /announcements/{announcementId} {
-        // Members can read announcements in their church
         allow read: if isSignedIn() && churchId == userChurchId();
-        
-        // Admins can manage announcements in their church
-        allow write: if isSignedIn() && isAdmin() && churchId == userChurchId();
+        allow create, update: if isSignedIn() && (
+          isSuper() ||
+          (isAdmin() && churchId == userChurchId()) ||
+          (isLeader() && request.resource.data.type == 'group_announcement' && 
+           request.resource.data.groupId != null && 
+           get(/databases/$(database)/documents/churches/$(churchId)/smallGroups/$(request.resource.data.groupId)).data.leaderId == request.auth.uid)
+        );
+        allow delete: if isSignedIn() && (
+          isSuper() ||
+          (isAdmin() && churchId == userChurchId()) ||
+          (isLeader() && resource.data.type == 'group_announcement' && 
+           resource.data.authorId == request.auth.uid)
+        );
       }
 
       // Meetings subcollection
       match /meetings/{meetingId} {
-        // Members can read meetings in their church
         allow read: if isSignedIn() && churchId == userChurchId();
-        
-        // Admins can manage meetings in their church
-        allow write: if isSignedIn() && isAdmin() && churchId == userChurchId();
+        allow write: if isSignedIn() && (isSuper() || (isAdmin() && churchId == userChurchId()));
       }
 
       // Join requests subcollection
       match /joinRequests/{requestId} {
-        // Users can create and read their own requests
-        allow create: if isSignedIn() && request.auth.uid == requestId;
-        allow read, delete: if isSignedIn() && request.auth.uid == requestId;
-        
-        // Admins can manage all requests in their church
-        allow read, write: if isSignedIn() && isAdmin() && churchId == userChurchId();
+        allow create: if isSignedIn();
+        allow read: if isSignedIn() && (
+          isSuper() ||
+          request.auth.uid == requestId ||
+          (isAdmin() && churchId == userChurchId())
+        );
+        allow update, delete: if isSignedIn() && (
+          isSuper() ||
+          (isAdmin() && churchId == userChurchId()) ||
+          (request.auth.uid == requestId)
+        );
       }
 
       // Members subcollection
       match /members/{memberId} {
-        // Members can read the member list in their church
         allow read: if isSignedIn() && churchId == userChurchId();
-        
-        // Only admins can modify member data in their church
-        allow write: if isSignedIn() && isAdmin() && churchId == userChurchId();
-      }
-
-      // Attendance records
-      match /attendance/{recordId} {
-        // Members can read attendance records in their church
-        allow read: if isSignedIn() && churchId == userChurchId();
-        
-        // Only admins can manage attendance records in their church
-        allow write: if isSignedIn() && isAdmin() && churchId == userChurchId();
+        allow write: if isSignedIn() && (isSuper() || (isAdmin() && churchId == userChurchId()));
       }
     }
   }

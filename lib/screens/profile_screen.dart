@@ -15,6 +15,7 @@ import '../services/notification_service.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import '../services/auth_service.dart';
 import '../widgets/loading_overlay.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -263,16 +264,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
         firstName: _firstNameController.text.trim(),
         lastName: _lastNameController.text.trim(),
         email: _emailController.text.trim(),
+        phone: _phoneController.text.trim(),
+        address: _addressController.text.trim(),
       );
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profile updated successfully')),
       );
+
+      setState(() {
+        _isEditing = false;
+        _isSaving = false;
+      });
+
+      _loadUserData(); // Reload the profile data
     } catch (e) {
-      setState(() => _error = e.toString());
-    } finally {
-      setState(() => _isSaving = false);
+      setState(() {
+        _error = e.toString();
+        _isSaving = false;
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error updating profile: $e')));
     }
   }
 
@@ -480,7 +495,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            if (_isEditing)
+                            if (_isEditing &&
+                                (role.toLowerCase() == 'admin' ||
+                                    role.toLowerCase() == 'leader'))
                               IconButton(
                                 icon: const Icon(Icons.add),
                                 onPressed: () {
@@ -509,7 +526,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       (group) => Chip(
                                         label: Text(group),
                                         onDeleted:
-                                            _isEditing
+                                            (_isEditing &&
+                                                    (role.toLowerCase() ==
+                                                            'admin' ||
+                                                        role.toLowerCase() ==
+                                                            'leader'))
                                                 ? () {
                                                   // TODO: Remove from small group
                                                 }
@@ -582,20 +603,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                 ),
-                ElevatedButton(
-                  onPressed: () async {
-                    final user = FirebaseAuth.instance.currentUser;
-                    if (user != null) {
-                      await NotificationService().createNotification(
-                        userId: user.uid,
-                        title: 'Test Notification',
-                        message: 'This is a test notification.',
-                        type: 'test',
-                      );
-                    }
-                  },
-                  child: Text('Create Test Notification'),
-                ),
+                const SizedBox(height: 30),
+                if (kDebugMode)
+                  ElevatedButton(
+                    onPressed: () async {
+                      final user = FirebaseAuth.instance.currentUser;
+                      if (user != null) {
+                        await NotificationService().createNotification(
+                          userId: user.uid,
+                          title: 'Test Notification',
+                          message: 'This is a test notification.',
+                          type: 'test',
+                        );
+                      }
+                    },
+                    child: Text('Create Test Notification'),
+                  ),
               ],
             ),
           ),

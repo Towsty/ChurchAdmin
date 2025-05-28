@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_api_availability/google_api_availability.dart';
 
 import 'firebase_options.dart';
 import 'screens/home_screen.dart';
 import 'screens/auth_screen.dart';
 import 'models/app_user.dart';
 import 'services/user_service.dart';
+import 'services/auth_service.dart';
+import 'widgets/loading_overlay.dart';
 
 import 'screens/attendance_input_screen.dart';
 import 'screens/attendance_history_screen.dart';
@@ -19,25 +22,36 @@ import 'screens/manage_members_screen.dart';
 import 'screens/manage_announcements_screen.dart';
 import 'screens/church_settings_screen.dart';
 
+Future<void> initializeApp() async {
+  try {
+    // Initialize Firebase first
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    print('🟢 Firebase initialized');
+
+    // Configure Firestore settings for mobile persistence
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+      sslEnabled: true,
+    );
+
+    // Initialize Auth
+    await FirebaseAuth.instance.authStateChanges().first;
+    print('🟢 Auth initialized');
+  } catch (e, stackTrace) {
+    print('🔥 Error during initialization: $e');
+    print('Stack trace: $stackTrace');
+    rethrow; // Rethrow to handle in the UI
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  print('Before Firebase init');
   print('🟡 Step 1: Flutter bindings initialized');
 
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  print('🟢 Step 2: Firebase initialized');
-  print('Firebase initialized');
-
-  // ✅ Enable Firestore debug logging
-  FirebaseFirestore.instance.settings = const Settings(
-    persistenceEnabled: true,
-    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-  );
-  //FirebaseFirestore.instance.setLogLevel(LogLevel.debug);
-
-  final user = FirebaseAuth.instance.currentUser;
-  print('👤 Initial user: ${user?.uid ?? 'none'}');
+  await initializeApp();
 
   runApp(const ChurchAdminApp());
 }
@@ -70,6 +84,8 @@ class ChurchAdminApp extends StatelessWidget {
       secondaryContainer: Colors.deepPurple[900],
       onSecondaryContainer: Colors.white,
     );
+
+    final authService = AuthService();
 
     return MaterialApp(
       title: 'Church Admin',
@@ -226,8 +242,66 @@ class ChurchAdminApp extends StatelessWidget {
         print(
           '🎯 Drawer background: ${Theme.of(context).drawerTheme.backgroundColor}',
         );
-        return child!;
+        return LoadingOverlay(
+          isLoading: authService.isSigningOut,
+          message: 'Switching accounts...',
+          child: child!,
+        );
       },
+      home: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
+
+          if (snapshot.hasError) {
+            print('🔥 Auth stream error: ${snapshot.error}');
+            return Scaffold(
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      size: 48,
+                      color: Colors.red,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Authentication Error',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Please try again later.\n${snapshot.error}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () => authService.signOut(context),
+                      child: const Text('Sign Out'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          final user = snapshot.data;
+          if (user == null) {
+            return const AuthScreen();
+          }
+
+          return const HomeScreen();
+        },
+      ),
       routes: {
         '/attendance': (_) => const AttendanceInputScreen(),
         '/attendance-history': (_) => const AttendanceHistoryScreen(),
@@ -261,69 +335,6 @@ class ChurchAdminApp extends StatelessWidget {
                   as Map<String, dynamic>;
           return ChurchSettingsScreen(churchId: args['churchId']);
         },
-      },
-      home: const AuthGate(),
-    );
-  }
-}
-
-class AuthGate extends StatelessWidget {
-  const AuthGate({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, authSnapshot) {
-        if (authSnapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        final user = authSnapshot.data;
-        if (user == null) {
-          print('🛑 No Firebase user found. Showing auth screen.');
-          return const AuthScreen();
-        }
-
-        return FutureBuilder<AppUser?>(
-          future: UserService().getUser(user.uid),
-          builder: (context, userSnapshot) {
-            if (userSnapshot.connectionState == ConnectionState.waiting) {
-              return const Scaffold(
-                body: Center(child: CircularProgressIndicator()),
-              );
-            }
-
-            if (userSnapshot.hasError) {
-              print('🔥 Error loading user profile: ${userSnapshot.error}');
-              return const Scaffold(
-                body: Center(
-                  child: Text('Something went wrong. Please try again.'),
-                ),
-              );
-            }
-
-            final appUser = userSnapshot.data;
-            if (appUser == null) {
-              print('❌ AppUser profile not found for UID: ${user.uid}');
-              return const Scaffold(
-                body: Center(
-                  child: Text(
-                    'User profile not found.\nPlease contact support or re-register.',
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              );
-            }
-
-            print('✅ AppUser loaded: ${appUser.name}');
-
-            // ✅ Main screen
-            return const HomeScreen();
-          },
-        );
       },
     );
   }
